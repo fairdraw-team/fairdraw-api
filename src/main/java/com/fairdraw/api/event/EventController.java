@@ -19,7 +19,7 @@ public class EventController {
     @PostMapping("/api/events")
     @ResponseStatus(HttpStatus.CREATED)
     public EventResponse create(@AuthenticationPrincipal Jwt jwt,
-                                @Valid @RequestBody CreateEventRequest req) {
+            @Valid @RequestBody CreateEventRequest req) {
         return eventService.create(jwt, req);
     }
 
@@ -40,21 +40,26 @@ public class EventController {
 
     @PatchMapping("/api/events/{id}")
     public EventResponse update(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
-                                @Valid @RequestBody UpdateEventRequest req) {
+            @Valid @RequestBody UpdateEventRequest req) {
         return eventService.update(jwt, id, req);
     }
 
     @PostMapping("/api/events/{id}/sections")
     @ResponseStatus(HttpStatus.CREATED)
     public SectionResponse addSection(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
-                                      @Valid @RequestBody CreateSectionRequest req) {
+            @Valid @RequestBody CreateSectionRequest req) {
         return eventService.addSection(jwt, id, req);
     }
 
     @PostMapping("/api/events/{id}/staff")
     @ResponseStatus(HttpStatus.CREATED)
     public StaffResponse addStaff(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
-                                  @Valid @RequestBody AddStaffRequest req) {
+            @Valid @RequestBody AddStaffRequest req) {
         return eventService.addStaff(jwt, id, req);
+    }
+
+    @GetMapping("/api/public/events/{id}")
+    public EventResponse getPublic(@PathVariable UUID id) {
+        return eventService.getPublic(id);
     }
 }
