@@ -10,6 +10,9 @@ import java.util.UUID;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import com.fairdraw.api.common.ApiException;
+import java.util.Map;
+import org.springframework.http.HttpStatus;
 
 @Entity
 @Table(name = "events")
@@ -33,4 +36,19 @@ public class Event {
     private Integer ballotsPerUser;
     private Integer maxTeamSize;
     private String status = "draft";
+    /** 허용된 다음 상태: draft→open→closed→drawn→paying→done 순서로만 */
+    private static final Map<String, String> NEXT = Map.of(
+            "draft", "open",
+            "open", "closed",
+            "closed", "drawn",
+            "drawn", "paying",
+            "paying", "done");
+
+    public void transitionTo(String next) {
+        if (!next.equals(NEXT.get(this.status))) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_TRANSITION",
+                    "공연 상태를 " + this.status + "에서 " + next + "(으)로 바꿀 수 없습니다");
+        }
+        this.status = next;
+    }
 }

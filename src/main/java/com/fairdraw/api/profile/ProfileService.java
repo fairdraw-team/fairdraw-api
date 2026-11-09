@@ -43,4 +43,17 @@ public class ProfileService {
         profile.setRealName(realName.trim());
         return profile;
     }
+
+    /** 응모·팀 전에: 휴대폰 인증과 실명이 있어야 함 */
+    @Transactional
+    public Profile requireVerified(Jwt jwt) {
+        Profile p = syncFromToken(jwt);
+        if (p.getPhone() == null) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "PHONE_NOT_VERIFIED", "휴대폰 인증이 필요합니다");
+        }
+        if (p.getRealName() == null || p.getRealName().isBlank()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "PHONE_NOT_VERIFIED", "실명을 입력해 주세요");
+        }
+        return p;
+    }
 }
