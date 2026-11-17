@@ -31,6 +31,8 @@ public class DrawService {
     private final TeamRepository teamRepository;
     private final EventService eventService;
 
+    // ===================== 2주차: 마감·봉인·현황 =====================
+
     /** 마감 + 명단 봉인 (전부 한 트랜잭션) */
     @Transactional
     public SealResponse seal(Jwt jwt, UUID eventId) {
@@ -107,4 +109,18 @@ public class DrawService {
         return new SealResponse(draw.getEventId(), draw.getRosterHash(), draw.getSealedAt(),
                 draw.getBallotCount(), sections);
     }
+
+    // ===================== 3주차: 추첨 (BE-1 껍데기, 2일차에 채움) =====================
+
+    public DrawInfoResponse draw(Jwt jwt, UUID eventId) { throw ApiException.notImplemented(); }
+
+    public MyDrawResult myResult(Jwt jwt, UUID eventId) { throw ApiException.notImplemented(); }
+
+    public DrawResultPage results(Jwt jwt, UUID eventId, String result, int page, int size) {
+        throw ApiException.notImplemented();
+    }
+
+    public DrawInfoResponse publicDraw(UUID eventId) { throw ApiException.notImplemented(); }
+
+    public PublicBallotsResponse publicBallots(UUID eventId) { throw ApiException.notImplemented(); }
 }
