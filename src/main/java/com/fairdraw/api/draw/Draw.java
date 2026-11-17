@@ -23,4 +23,6 @@ public class Draw {
     private Integer ballotCount;
     private OffsetDateTime sealedAt;
     private String status = "sealed";
+    private String seed;               // 추첨 시드 (봉인만 했으면 null)
+    private OffsetDateTime drawnAt;    // 추첨 시각 (봉인만 했으면 null)
 }
