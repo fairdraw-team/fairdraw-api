@@ -92,13 +92,7 @@ public class DrawService {
 
     /** 정렬된 제비 id → 줄바꿈으로 이어 붙임 → SHA-256 → 16진수 64글자. DB 없이 돌아감 */
     public static String hashOf(List<String> sortedIds) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(String.join("\n", sortedIds).getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException(e);
-        }
+        return DrawEngine.sha256Hex(String.join("\n", sortedIds));
     }
 
     private SealResponse toSealResponse(Draw draw) {
