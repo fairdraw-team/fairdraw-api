@@ -6,7 +6,7 @@ package com.fairdraw.api.entry;
  * (V3에서 active로 바뀌지 않아서 임시로 submitted를 씀. DB가 V4로 바뀌면 "active"로 되돌릴 것)
  */
 public final class EntryStatus {
-    public static final String ACTIVE = "submitted";
+    public static final String ACTIVE = "active";
     public static final String CANCELLED = "cancelled";
     private EntryStatus() {}
 }
