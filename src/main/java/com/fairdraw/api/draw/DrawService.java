@@ -1,5 +1,7 @@
 package com.fairdraw.api.draw;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import com.fairdraw.api.common.ApiException;
 import com.fairdraw.api.draw.DrawDtos.*;
 import com.fairdraw.api.draw.DrawEngine.DrawBallot;
@@ -203,20 +205,95 @@ public class DrawService {
     /** 누구나: 공개 추첨 정보 (봉인만 됐거나 없으면 404) */
     @Transactional(readOnly = true)
     public DrawInfoResponse publicDraw(UUID eventId) {
-        Draw draw = drawRepository.findByEventId(eventId)
+        return toDrawInfo(drawnOrThrow(eventId));
+    }
+
+    /** 관객: 내 결과. 공연 없음 → 내 응모 없음 → 추첨 전 순서로 검사 */
+    @Transactional(readOnly = true)
+    public MyDrawResult myResult(Jwt jwt, UUID eventId) {
+        eventService.find(eventId);                                         // 404 NOT_FOUND
+        UUID userId = UUID.fromString(jwt.getSubject());
+        Entry entry = entryRepository.findByEventIdAndUserIdAndStatus(eventId, userId, EntryStatus.ACTIVE)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ENTRY_NOT_FOUND", "아직 응모하지 않았습니다"));
+        Draw draw = drawnOrThrow(eventId);                                  // 404 DRAW_NOT_FOUND
+        DrawResult r = drawResultRepository.findByDrawIdAndEntryId(draw.getId(), entry.getId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "DRAW_NOT_FOUND", "추첨 결과가 없습니다"));
+
+        String sectionName = r.getSectionId() == null ? null
+                : sectionRepository.findById(r.getSectionId()).map(Section::getName).orElse(null);
+        List<UUID> myBallotIds = ballotRepository.findByEntryId(entry.getId()).stream()
+                .map(Ballot::getId).toList();
+        return new MyDrawResult(eventId, r.getResult(), r.getSectionId(), sectionName,
+                r.getWaitlistRank(), entry.getTeamId(), myBallotIds);
+    }
+
+    /** 주최자: 결과 명단 (result를 빼면 전부) */
+    @Transactional(readOnly = true)
+    public DrawResultPage results(Jwt jwt, UUID eventId, String result, int page, int size) {
+        eventService.findOwned(jwt, eventId);                               // 주최자 아니면 403
+        Draw draw = drawnOrThrow(eventId);
+        if (result != null && result.isBlank()) result = null;
+        if (result != null && !List.of(DrawResultType.WON, DrawResultType.WAITLISTED, DrawResultType.LOST).contains(result)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION", "result는 won, waitlisted, lost 중 하나입니다");
+        }
+        int safeSize = Math.min(Math.max(size, 1), 100);
+        Page<Object[]> p = drawResultRepository.findResultRows(draw.getId(), result,
+                PageRequest.of(Math.max(page, 0), safeSize));
+
+        List<DrawResultRow> rows = p.getContent().stream().map(r -> new DrawResultRow(
+                UUID.fromString((String) r[0]),
+                (String) r[1],
+                maskPhone((String) r[2]),
+                (String) r[3],
+                (String) r[4],
+                r[5] == null ? null : ((Number) r[5]).intValue(),
+                r[6] == null ? null : UUID.fromString((String) r[6])
+        )).toList();
+        return new DrawResultPage(rows, p.getNumber(), p.getSize(), p.getTotalElements(), p.getTotalPages());
+    }
+
+    /** 누구나: 추첨 순서대로 줄 선 제비 목록 (이름·번호·응모 id 없음) */
+    @Transactional(readOnly = true)
+    public PublicBallotsResponse publicBallots(UUID eventId) {
+        Draw draw = drawnOrThrow(eventId);
+        List<Entry> entries = entryRepository.findByEventIdAndStatus(eventId, EntryStatus.ACTIVE);
+        List<Ballot> ballots = ballotRepository.findByEntryIdIn(entries.stream().map(Entry::getId).toList());
+        Map<String, Ballot> byId = ballots.stream()
+                .collect(Collectors.toMap(b -> b.getId().toString(), Function.identity()));
+
+        // 저장된 시드로 순서를 다시 계산 (검증 페이지가 같은 계산을 다시 함)
+        List<String> ordered = DrawEngine.orderOf(draw.getSeed(),
+                ballots.stream().map(b -> b.getId().toString()).toList());
+
+        // 결정한 제비 → 결과. 팀은 팀원 모두가 같은 제비라 여러 행이어도 값은 하나
+        Map<UUID, String> resultByBallot = new HashMap<>();
+        for (DrawResult r : drawResultRepository.findByDrawId(draw.getId())) {
+            if (r.getBallotId() != null) resultByBallot.put(r.getBallotId(), r.getResult());
+        }
+        Map<UUID, String> sectionNames = sectionRepository.findByEventIdOrderByNameAsc(eventId).stream()
+                .collect(Collectors.toMap(Section::getId, Section::getName));
+
+        List<PublicBallot> list = new ArrayList<>();
+        for (int i = 0; i < ordered.size(); i++) {
+            Ballot b = byId.get(ordered.get(i));
+            list.add(new PublicBallot(i + 1, b.getId(), sectionNames.get(b.getSectionId()),
+                    resultByBallot.get(b.getId())));
+        }
+        return new PublicBallotsResponse(eventId, list);
+    }
+
+    /** 추첨까지 끝난 draws 행. 봉인만 됐거나 없으면 404 DRAW_NOT_FOUND */
+    private Draw drawnOrThrow(UUID eventId) {
+        return drawRepository.findByEventId(eventId)
                 .filter(d -> "drawn".equals(d.getStatus()))
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "DRAW_NOT_FOUND", "아직 추첨하지 않았습니다"));
-        return toDrawInfo(draw);
     }
 
-    public MyDrawResult myResult(Jwt jwt, UUID eventId) { throw ApiException.notImplemented(); }
-
-    public DrawResultPage results(Jwt jwt, UUID eventId, String result, int page, int size) {
-        throw ApiException.notImplemented();
+    /** 821012345678 → ***-****-5678 */
+    private static String maskPhone(String phone) {
+        if (phone == null || phone.length() < 4) return null;
+        return "***-****-" + phone.substring(phone.length() - 4);
     }
-
-    public PublicBallotsResponse publicBallots(UUID eventId) { throw ApiException.notImplemented(); }
-
     // ===================== 도우미 =====================
 
     /** 추첨 정보: 구역별 제비 수와 결과 수를 따로 세서 붙임 (한 번에 join하면 숫자가 부풀어짐) */
