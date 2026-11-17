@@ -47,6 +47,7 @@ public class TeamService {
     public TeamResponse create(Jwt jwt, CreateTeamRequest req) {
         Profile me = profileService.requireVerified(jwt);
         Event event = eventService.find(req.eventId());
+        eventService.assertNotOrganizer(event, me.getId());         // 주최자는 자기 공연에 팀 불가
         eventService.assertEntryWindowOpen(event);
         Section section = sectionRepository.findById(req.sectionId())
                 .filter(s -> s.getEventId().equals(event.getId()))
@@ -74,6 +75,7 @@ public class TeamService {
         Team team = teamRepository.findByInviteCodeForUpdate(code.trim().toUpperCase())
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "INVALID_CODE", "코드를 다시 확인하세요"));
         Event event = eventService.find(team.getEventId());
+        eventService.assertNotOrganizer(event, me.getId());         // 주최자는 자기 공연 팀에 합류 불가
         eventService.assertEntryWindowOpen(event);
         if (entryRepository.existsByEventIdAndUserIdAndStatus(event.getId(), me.getId(), EntryStatus.ACTIVE)) {
             throw EntryService.alreadyEntered();

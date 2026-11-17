@@ -203,4 +203,12 @@ public class EventService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "ENTRY_WINDOW_CLOSED", "응모 기간이 아닙니다");
         }
     }
+
+    /** 주최자는 자기 공연에 응모·팀 만들기·합류를 할 수 없음 */
+    public void assertNotOrganizer(Event e, UUID userId) {
+        if (e.getOrganizerId().equals(userId)) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "ORGANIZER_CANNOT_ENTER",
+                    "주최자는 자기 공연에 응모할 수 없습니다");
+        }
+    }
 }
