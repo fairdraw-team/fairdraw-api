@@ -39,6 +39,7 @@ public class EntryService {
     public MyEntryResponse create(Jwt jwt, UUID eventId, CreateEntryRequest req) {
         Profile me = profileService.requireVerified(jwt);          // ① 휴대폰·실명
         Event event = eventService.find(eventId);
+        eventService.assertNotOrganizer(event, me.getId());         // 주최자는 자기 공연에 응모 불가
         eventService.assertEntryWindowOpen(event);                  // ② open인가 ③ 기간 안인가
         Entry entry = createEntry(event, me.getId(), null, req.allocations()); // ④ 제비 검사 ⑤ 중복 검사
         return toMyResponse(entry);

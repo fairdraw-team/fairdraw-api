@@ -13,4 +13,5 @@ public interface EntryRepository extends JpaRepository<Entry, UUID> {
     List<Entry> findByTeamId(UUID teamId);
     long countByEventIdAndStatus(UUID eventId, String status);
     Page<Entry> findByEventIdOrderByCreatedAtAsc(UUID eventId, Pageable pageable);
+    List<Entry> findByEventIdAndStatus(UUID eventId, String status);
 }
