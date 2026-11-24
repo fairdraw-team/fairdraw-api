@@ -53,7 +53,7 @@ public class EventService {
 
     @Transactional(readOnly = true)
     public List<EventResponse> openEvents() {
-        return eventRepository.findByStatusOrderByStartsAtAsc("open").stream()
+            return eventRepository.findByStatusNotOrderByStartsAtAsc("draft").stream()
                 .map(this::toResponse).toList();
     }
 

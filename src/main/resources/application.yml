@@ -22,6 +22,13 @@ spring:
 app:
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
+  portone:
+    api-secret: ${PORTONE_API_SECRET:}
+    webhook-secret: ${PORTONE_WEBHOOK_SECRET:}
+    store-id: ${PORTONE_STORE_ID:}
+    channel-key: ${PORTONE_CHANNEL_KEY:}
+  cron-secret: ${CRON_SECRET:}
+  succession-pay-minutes: ${SUCCESSION_PAY_MINUTES:1440}
 
 server:
   port: ${PORT:8080}
