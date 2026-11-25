@@ -42,6 +42,7 @@ public class PaymentService {
     private final TicketRepository ticketRepository;
     private final TicketService ticketService;
     private final PortOneClient portOneClient;
+    private final PaymentSyncService paymentSyncService;
     private final EntityManager entityManager;
 
     // ===================== 결제 열기 (BE-3) =====================
@@ -150,6 +151,32 @@ public class PaymentService {
         String orderName = (event.getTitle() + " " + sectionName).trim();
         return new PrepareResponse(paymentId, b.getAmount(), orderName,
                 portOneClient.storeId(), portOneClient.channelKey());
+    }
+
+    // ===================== 결제 확인 (BE-5) =====================
+
+    /** 트랜잭션 없음: sync가 따로 커밋한 뒤에 에러로 바꿔야 취소 기록이 남음 */
+    public CompleteResponse complete(Jwt jwt, CompleteRequest req) {
+        UUID me = UUID.fromString(jwt.getSubject());
+        Payment p = paymentRepository.findByPaymentId(req.paymentId())
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "결제 기록이 없습니다"));
+        Booking b = bookingRepository.findById(p.getBookingId())
+                .orElseThrow(PaymentService::bookingNotFound);
+        if (!me.equals(b.getUserId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "내 결제가 아닙니다");
+        }
+
+        PaymentSyncService.Result r = paymentSyncService.sync(req.paymentId());
+        switch (r) {
+            case PAID -> {
+                return new CompleteResponse(p.getPaymentId(), PaymentStatus.PAID, b.getId(), b.getEventId());
+            }
+            case NOT_FOUND -> throw new ApiException(HttpStatus.NOT_FOUND, "PAYMENT_NOT_FOUND", "결제 기록이 없습니다");
+            case NOT_PAID -> throw new ApiException(HttpStatus.CONFLICT, "PAYMENT_NOT_PAID", "아직 결제가 완료되지 않았습니다");
+            case AMOUNT_MISMATCH -> throw new ApiException(HttpStatus.CONFLICT, "AMOUNT_MISMATCH", "결제 금액이 달라 취소했습니다");
+            case BOOKING_EXPIRED -> throw new ApiException(HttpStatus.CONFLICT, "BOOKING_EXPIRED", "결제 기한이 지나 취소했습니다");
+            default -> throw new IllegalStateException("알 수 없는 결과: " + r);
+        }
     }
 
     // ===================== 결제 현황 (BE-11) =====================

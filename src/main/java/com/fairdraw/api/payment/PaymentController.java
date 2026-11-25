@@ -25,6 +25,6 @@ public class PaymentController {
     @PostMapping("/complete")
     public CompleteResponse complete(@AuthenticationPrincipal Jwt jwt,
                                      @RequestBody CompleteRequest req) {
-        throw ApiException.notImplemented();
+            return paymentService.complete(jwt, req);
     }
 }
