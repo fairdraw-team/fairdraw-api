@@ -17,7 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class PaymentSyncService {
 
-    public enum Result { PAID, NOT_PAID, AMOUNT_MISMATCH, BOOKING_EXPIRED, NOT_FOUND }
+    /** UNKNOWN: 포트원에 물어보다 실패함(네트워크·키 문제). 이번엔 판단하지 않음 */
+    public enum Result { PAID, NOT_PAID, AMOUNT_MISMATCH, BOOKING_EXPIRED, NOT_FOUND, UNKNOWN }
 
     private final PaymentRepository paymentRepository;
     private final BookingRepository bookingRepository;
@@ -34,7 +35,13 @@ public class PaymentSyncService {
         if (PaymentStatus.PAID.equals(p.getStatus())) return Result.PAID;
 
         // ③ 포트원에 직접 조회
-        PortOnePayment po = portOneClient.get(paymentId);
+        PortOnePayment po;
+        try {
+            po = portOneClient.get(paymentId);
+        } catch (Exception e) {
+            log.error("포트원 조회 실패 paymentId={}", paymentId, e);
+            return Result.UNKNOWN;
+        }
         if (po == null || !"PAID".equals(po.status())) {
             if (po != null && ("FAILED".equals(po.status()) || "CANCELLED".equals(po.status()))) {
                 p.setStatus(PaymentStatus.FAILED);

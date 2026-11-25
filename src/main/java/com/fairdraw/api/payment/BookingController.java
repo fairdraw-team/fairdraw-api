@@ -50,6 +50,6 @@ public class BookingController {
     @PostMapping("/payment/process")
     public PaymentStatsResponse process(@AuthenticationPrincipal Jwt jwt,
                                         @PathVariable UUID eventId) {
-        throw ApiException.notImplemented();
+            return paymentService.processNow(jwt, eventId);
     }
 }

@@ -1,5 +1,8 @@
 package com.fairdraw.api.payment;
 
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.mapping;
+import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 
@@ -23,11 +26,13 @@ import jakarta.persistence.EntityManager;
 import java.time.OffsetDateTime;
 import java.util.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class PaymentService {
@@ -39,11 +44,16 @@ public class PaymentService {
     private final EntryRepository entryRepository;
     private final BookingRepository bookingRepository;
     private final PaymentRepository paymentRepository;
+    private final SuccessionRepository successionRepository;
     private final TicketRepository ticketRepository;
     private final TicketService ticketService;
     private final PortOneClient portOneClient;
     private final PaymentSyncService paymentSyncService;
+    private final PaymentProps paymentProps;
     private final EntityManager entityManager;
+
+    /** 만료·승계 한 번의 결과 (tick이 합산해서 응답) */
+    public record ProcessResult(int expired, int succeeded) {}
 
     // ===================== 결제 열기 (BE-3) =====================
 
@@ -175,8 +185,106 @@ public class PaymentService {
             case NOT_PAID -> throw new ApiException(HttpStatus.CONFLICT, "PAYMENT_NOT_PAID", "아직 결제가 완료되지 않았습니다");
             case AMOUNT_MISMATCH -> throw new ApiException(HttpStatus.CONFLICT, "AMOUNT_MISMATCH", "결제 금액이 달라 취소했습니다");
             case BOOKING_EXPIRED -> throw new ApiException(HttpStatus.CONFLICT, "BOOKING_EXPIRED", "결제 기한이 지나 취소했습니다");
+            case UNKNOWN -> throw new ApiException(HttpStatus.BAD_GATEWAY, "PORTONE_ERROR", "결제사 확인에 실패했습니다. 잠시 후 다시 시도하세요");
             default -> throw new IllegalStateException("알 수 없는 결과: " + r);
         }
+    }
+
+    // ===================== 미결제 만료와 승계 (BE-7) =====================
+
+    /** 주최자 버튼: 미결제 지금 처리 */
+    @Transactional
+    public PaymentStatsResponse processNow(Jwt jwt, UUID eventId) {
+        Event owned = eventService.findOwned(jwt, eventId);
+        if (!"paying".equals(owned.getStatus())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "EVENT_NOT_PAYING", "결제 중인 공연이 아닙니다");
+        }
+        process(eventId, OffsetDateTime.now());
+        return toStats(eventService.find(eventId));
+    }
+
+    /** 공연 하나 처리. 주최자 버튼과 tick이 같이 씀. 두 번 불러도 결과가 같음 */
+    @Transactional
+    public ProcessResult process(UUID eventId, OffsetDateTime now) {
+        Event event = eventRepository.findByIdForUpdate(eventId).orElse(null);  // 같은 공연 동시 처리 막기
+        if (event == null) return new ProcessResult(0, 0);
+        entityManager.refresh(event);
+        if (!"paying".equals(event.getStatus())) return new ProcessResult(0, 0);  // ①
+
+        // ② 기한 지난 pending, ③ ready 결제가 있으면 먼저 확인
+        List<Booking> expired = new ArrayList<>();
+        for (Booking b : bookingRepository.findOverdueForUpdate(eventId, now)) {
+            boolean skip = false;
+            for (Payment p : paymentRepository.findByBookingIdAndStatus(b.getId(), PaymentStatus.READY)) {
+                PaymentSyncService.Result r = paymentSyncService.sync(p.getPaymentId());
+                if (r == PaymentSyncService.Result.PAID || r == PaymentSyncService.Result.UNKNOWN) {
+                    skip = true;   // 결제됐거나 확인 불가 → 이번엔 만료시키지 않음
+                    break;
+                }
+            }
+            if (skip || !BookingStatus.PENDING.equals(b.getStatus())) continue;
+            b.setStatus(BookingStatus.EXPIRED);                           // ④
+            expired.add(b);
+        }
+
+        // ⑤ 공연 시작 전이면 같은 구역 대기자에게 넘김
+        int succeeded = 0;
+        if (!expired.isEmpty() && event.getStartsAt() != null && now.isBefore(event.getStartsAt())) {
+            Set<UUID> bookedEntries = bookingRepository.findByEventId(eventId).stream()
+                    .map(Booking::getEntryId).filter(Objects::nonNull).collect(toSet());
+            List<DrawResult> waitlisted = drawResultRepository
+                    .findByEventIdAndResult(eventId, DrawResultType.WAITLISTED).stream()   // rank 순
+                    .filter(r -> !bookedEntries.contains(r.getEntryId()))
+                    .toList();
+            Map<UUID, DrawResult> resultByEntry = waitlisted.stream()
+                    .collect(toMap(DrawResult::getEntryId, r -> r, (a, c) -> a));
+            Map<UUID, List<UUID>> queues = waitlisted.stream()
+                    .collect(groupingBy(DrawResult::getSectionId, LinkedHashMap::new,
+                            mapping(DrawResult::getEntryId, toList())));
+
+            List<SuccessionEngine.Pair> pairs = SuccessionEngine.pick(
+                    expired.stream().map(b -> new SuccessionEngine.Expired(b.getId(), b.getSectionId())).toList(),
+                    queues);
+
+            Map<UUID, Booking> expiredById = expired.stream().collect(toMap(Booking::getId, b -> b));
+            Map<UUID, UUID> userByEntry = entryRepository
+                    .findAllById(pairs.stream().map(SuccessionEngine.Pair::toEntryId).toList()).stream()
+                    .collect(toMap(Entry::getId, Entry::getUserId));
+
+            OffsetDateTime due = now.plusMinutes(paymentProps.successionPayMinutes());
+            if (due.isAfter(event.getStartsAt())) due = event.getStartsAt();
+
+            for (SuccessionEngine.Pair pair : pairs) {
+                Booking from = expiredById.get(pair.fromBookingId());
+                Booking to = new Booking();
+                to.setEventId(eventId);
+                to.setUserId(userByEntry.get(pair.toEntryId()));
+                to.setSectionId(from.getSectionId());
+                to.setAmount(from.getAmount());
+                to.setDrawResultId(resultByEntry.get(pair.toEntryId()).getId());
+                to.setEntryId(pair.toEntryId());
+                to.setStatus(BookingStatus.PENDING);
+                to.setSource(BookingSource.SUCCESSION);
+                to.setPayDueAt(due);
+                bookingRepository.save(to);
+
+                Succession s = new Succession();
+                s.setFromBookingId(from.getId());
+                s.setToEntryId(pair.toEntryId());
+                s.setToBookingId(to.getId());
+                successionRepository.save(s);
+                succeeded++;
+            }
+        }
+
+        // ⑥ 결제 대기가 하나도 없으면 결제 기간 끝
+        if (!bookingRepository.existsByEventIdAndStatus(eventId, BookingStatus.PENDING)) {
+            event.transitionTo("done");
+        }
+        if (!expired.isEmpty()) {
+            log.info("공연 {} 처리: 만료 {}, 승계 {}", eventId, expired.size(), succeeded);
+        }
+        return new ProcessResult(expired.size(), succeeded);
     }
 
     // ===================== 결제 현황 (BE-11) =====================
