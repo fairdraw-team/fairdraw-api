@@ -1,6 +1,5 @@
 package com.fairdraw.api.ticket;
 
-import com.fairdraw.api.common.ApiException;
 import com.fairdraw.api.ticket.TicketDtos.*;
 import java.util.List;
 import java.util.UUID;
@@ -14,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 public class TicketController {
 
     private final TicketService ticketService;
+    private final ScanService scanService;
 
     /** 관객: 내 티켓 목록 (QR용 code 포함) */
     @GetMapping("/api/tickets/me")
@@ -25,13 +25,13 @@ public class TicketController {
     @PostMapping("/api/tickets/scan")
     public ScanResponse scan(@AuthenticationPrincipal Jwt jwt,
                              @RequestBody ScanRequest req) {
-        throw ApiException.notImplemented();
+        return scanService.scan(jwt, req);
     }
 
     /** 주최자·스태프: 스캔 화면용 요약 (권한 확인 겸함) */
     @GetMapping("/api/events/{eventId}/scan/summary")
     public ScanSummaryResponse scanSummary(@AuthenticationPrincipal Jwt jwt,
                                            @PathVariable UUID eventId) {
-        throw ApiException.notImplemented();
+        return scanService.summary(jwt, eventId);
     }
 }
