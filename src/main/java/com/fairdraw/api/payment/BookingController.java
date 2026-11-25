@@ -1,6 +1,5 @@
 package com.fairdraw.api.payment;
 
-import com.fairdraw.api.common.ApiException;
 import com.fairdraw.api.payment.PaymentDtos.*;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 public class BookingController {
 
     private final PaymentService paymentService;
+    private final BookingListService bookingListService;
 
     /** 관객: 이 공연에서 내 예매 */
     @GetMapping("/booking/me")
@@ -43,13 +43,13 @@ public class BookingController {
                                 @RequestParam(required = false) String status,
                                 @RequestParam(defaultValue = "0") int page,
                                 @RequestParam(defaultValue = "20") int size) {
-        throw ApiException.notImplemented();
+        return bookingListService.list(jwt, eventId, status, page, size);
     }
 
     /** 주최자: 미결제 지금 처리 (만료·승계) */
     @PostMapping("/payment/process")
     public PaymentStatsResponse process(@AuthenticationPrincipal Jwt jwt,
                                         @PathVariable UUID eventId) {
-            return paymentService.processNow(jwt, eventId);
+        return paymentService.processNow(jwt, eventId);
     }
 }
