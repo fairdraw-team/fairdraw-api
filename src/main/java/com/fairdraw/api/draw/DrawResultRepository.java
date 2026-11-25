@@ -43,4 +43,13 @@ public interface DrawResultRepository extends JpaRepository<DrawResult, UUID> {
     Page<Object[]> findResultRows(@Param("drawId") UUID drawId,
                                   @Param("result") String result,
                                   Pageable pageable);
+    
+    /** 공연 하나의 당첨자(won) 또는 대기자(waitlisted). 대기 순번 순 */
+    @Query(value = """
+            select r.* from draw_results r
+            join draws d on d.id = r.draw_id
+            where d.event_id = :eventId and r.result = :result
+            order by r.rank nulls last
+            """, nativeQuery = true)
+    List<DrawResult> findByEventIdAndResult(@Param("eventId") UUID eventId, @Param("result") String result);
 }

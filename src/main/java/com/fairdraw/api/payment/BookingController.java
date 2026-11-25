@@ -3,13 +3,17 @@ package com.fairdraw.api.payment;
 import com.fairdraw.api.common.ApiException;
 import com.fairdraw.api.payment.PaymentDtos.*;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/events/{eventId}")
+@RequiredArgsConstructor
 public class BookingController {
+
+    private final PaymentService paymentService;
 
     /** 관객: 이 공연에서 내 예매 */
     @GetMapping("/booking/me")
@@ -22,14 +26,14 @@ public class BookingController {
     @PostMapping("/payment/open")
     public PaymentStatsResponse open(@AuthenticationPrincipal Jwt jwt,
                                      @PathVariable UUID eventId) {
-        throw ApiException.notImplemented();
+        return paymentService.open(jwt, eventId);
     }
 
     /** 주최자: 구역별 결제 현황 */
     @GetMapping("/payment/stats")
     public PaymentStatsResponse stats(@AuthenticationPrincipal Jwt jwt,
                                       @PathVariable UUID eventId) {
-        throw ApiException.notImplemented();
+        return paymentService.stats(jwt, eventId);
     }
 
     /** 주최자: 예매 명단. status를 비우면 전부 */
