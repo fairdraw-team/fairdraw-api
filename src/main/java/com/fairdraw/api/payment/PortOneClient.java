@@ -13,11 +13,21 @@ import org.springframework.web.client.RestClient;
 public class PortOneClient {
 
     private final String apiSecret;
+    private final String storeId;
+    private final String channelKey;
     private final RestClient client = RestClient.create();
 
-    public PortOneClient(@Value("${app.portone.api-secret}") String apiSecret) {
+    public PortOneClient(@Value("${app.portone.api-secret}") String apiSecret,
+                         @Value("${app.portone.store-id}") String storeId,
+                         @Value("${app.portone.channel-key}") String channelKey) {
         this.apiSecret = apiSecret;
+        this.storeId = storeId;
+        this.channelKey = channelKey;
     }
+
+    /** 결제창에 넘길 값 (비밀 아님) */
+    public String storeId() { return storeId; }
+    public String channelKey() { return channelKey; }
 
     /** 포트원이 돌려주는 결제 정보 중 우리가 쓰는 것만 */
     @JsonIgnoreProperties(ignoreUnknown = true)

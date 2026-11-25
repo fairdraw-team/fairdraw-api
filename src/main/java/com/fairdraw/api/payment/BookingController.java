@@ -19,7 +19,7 @@ public class BookingController {
     @GetMapping("/booking/me")
     public MyBookingResponse myBooking(@AuthenticationPrincipal Jwt jwt,
                                        @PathVariable UUID eventId) {
-        throw ApiException.notImplemented();
+        return paymentService.myBooking(jwt, eventId);
     }
 
     /** 주최자: 결제 열기. 당첨자마다 예매가 생기고 공연이 paying */

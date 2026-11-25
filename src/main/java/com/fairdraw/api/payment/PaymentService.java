@@ -38,8 +38,10 @@ public class PaymentService {
     private final DrawResultRepository drawResultRepository;
     private final EntryRepository entryRepository;
     private final BookingRepository bookingRepository;
+    private final PaymentRepository paymentRepository;
     private final TicketRepository ticketRepository;
     private final TicketService ticketService;
+    private final PortOneClient portOneClient;
     private final EntityManager entityManager;
 
     // ===================== 결제 열기 (BE-3) =====================
@@ -102,6 +104,54 @@ public class PaymentService {
         return toStats(event);
     }
 
+    // ===================== 내 예매 (BE-4) =====================
+
+    @Transactional(readOnly = true)
+    public MyBookingResponse myBooking(Jwt jwt, UUID eventId) {
+        UUID me = UUID.fromString(jwt.getSubject());
+        Booking b = bookingRepository.findFirstByEventIdAndUserIdOrderByCreatedAtDesc(eventId, me)
+                .orElseThrow(PaymentService::bookingNotFound);
+        String sectionName = sectionRepository.findById(b.getSectionId())
+                .map(Section::getName).orElse(null);
+        return new MyBookingResponse(b.getId(), b.getEventId(), b.getStatus(), sectionName,
+                b.getAmount(), b.getPayDueAt(), b.getSource(), b.getPaidAt());
+    }
+
+    // ===================== 결제 준비 (BE-4) =====================
+
+    @Transactional
+    public PrepareResponse prepare(Jwt jwt, PrepareRequest req) {
+        UUID me = UUID.fromString(jwt.getSubject());
+        Booking b = bookingRepository.findById(req.bookingId())          // ① 찾기
+                .orElseThrow(PaymentService::bookingNotFound);
+        if (!me.equals(b.getUserId())) {                                  //    내 것인가
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "내 예매가 아닙니다");
+        }
+        if (!BookingStatus.PENDING.equals(b.getStatus())) {               // ② 결제 대기인가
+            throw new ApiException(HttpStatus.CONFLICT, "BOOKING_NOT_PENDING", "결제할 수 없는 예매입니다");
+        }
+        if (!OffsetDateTime.now().isBefore(b.getPayDueAt())) {            // ③ 기한 안인가
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PAYMENT_WINDOW_CLOSED", "결제 기한이 지났습니다");
+        }
+
+        // ④ 결제 번호: fd + 32글자 = 영문 소문자·숫자 34글자
+        String paymentId = "fd" + UUID.randomUUID().toString().replace("-", "");
+
+        Payment p = new Payment();                                        // ⑤ 누를 때마다 새 행
+        p.setBookingId(b.getId());
+        p.setPaymentId(paymentId);
+        p.setAmount(b.getAmount());
+        p.setStatus(PaymentStatus.READY);
+        paymentRepository.save(p);
+
+        Event event = eventService.find(b.getEventId());                  // ⑥ 결제창에 넘길 값
+        String sectionName = sectionRepository.findById(b.getSectionId())
+                .map(Section::getName).orElse("");
+        String orderName = (event.getTitle() + " " + sectionName).trim();
+        return new PrepareResponse(paymentId, b.getAmount(), orderName,
+                portOneClient.storeId(), portOneClient.channelKey());
+    }
+
     // ===================== 결제 현황 (BE-11) =====================
 
     @Transactional(readOnly = true)
@@ -141,7 +191,13 @@ public class PaymentService {
                 issued, entered, rows);
     }
 
+    // ===================== 도우미 =====================
+
     private static long count(List<Booking> list, String status) {
         return list.stream().filter(b -> status.equals(b.getStatus())).count();
+    }
+
+    private static ApiException bookingNotFound() {
+        return new ApiException(HttpStatus.NOT_FOUND, "BOOKING_NOT_FOUND", "예매가 없습니다");
     }
 }
