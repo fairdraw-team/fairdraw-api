@@ -32,7 +32,7 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/actuator/health",
                     "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
-                    "/api/public/**",
+                    "/api/public/**", "/api/webhooks/**", "/api/internal/**",
                     "/error"
                 ).permitAll()
                 .requestMatchers("/api/**").authenticated()
