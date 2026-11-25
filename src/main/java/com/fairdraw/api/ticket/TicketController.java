@@ -4,17 +4,21 @@ import com.fairdraw.api.common.ApiException;
 import com.fairdraw.api.ticket.TicketDtos.*;
 import java.util.List;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
+@RequiredArgsConstructor
 public class TicketController {
+
+    private final TicketService ticketService;
 
     /** 관객: 내 티켓 목록 (QR용 code 포함) */
     @GetMapping("/api/tickets/me")
     public List<TicketResponse> myTickets(@AuthenticationPrincipal Jwt jwt) {
-        throw ApiException.notImplemented();
+        return ticketService.myTickets(jwt);
     }
 
     /** 주최자·스태프: 입장할 때 QR 스캔 */

@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     List<Booking> findByEventId(UUID eventId);
+    List<Booking> findByUserIdAndStatus(UUID userId, String status);
 
     /** 이 공연에서 내 예매 중 가장 최근 것 */
     Optional<Booking> findFirstByEventIdAndUserIdOrderByCreatedAtDesc(UUID eventId, UUID userId);
