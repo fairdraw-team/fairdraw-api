@@ -97,6 +97,25 @@ public class TeamService {
         return toResponse(team, me);
     }
 
+    
+    /** 내가 들어가 있는 팀 목록 (마이페이지용) */
+    @Transactional(readOnly = true)
+    public List<MyTeamResponse> mine(Jwt jwt) {
+        UUID me = UUID.fromString(jwt.getSubject());
+        return teamMemberRepository.findByProfileIdOrderByJoinedAtDesc(me).stream()
+                .flatMap(member -> teamRepository.findById(member.getTeamId()).stream())
+                .map(team -> {
+                    Event event = eventService.find(team.getEventId());
+                    String sectionName = sectionRepository.findById(team.getSectionId())
+                            .map(Section::getName).orElse(null);
+                    return new MyTeamResponse(team.getId(), team.getEventId(), event.getTitle(),
+                            sectionName, team.getLeaderId().equals(me),
+                            (int) teamMemberRepository.countByTeamId(team.getId()),
+                            event.getMaxTeamSize());
+                })
+                .toList();
+    }
+
     /** 탈퇴: 팀원이면 내 응모만 취소, 팀장이면 팀 해체 + 전원 응모 취소 */
     @Transactional
     public void leave(Jwt jwt, UUID teamId) {

@@ -18,4 +18,9 @@ public class TeamDtos {
     public record TeamResponse(UUID id, UUID eventId, UUID sectionId, String sectionName,
                                UUID leaderId, String inviteCode, int maxSize, boolean full,
                                List<TeamMemberView> members) {}
+    
+    
+    /** 마이페이지 "내 팀" 목록의 한 줄 */
+    public record MyTeamResponse(UUID id, UUID eventId, String eventTitle, String sectionName,
+                                 boolean leader, int memberCount, int maxSize) {}
 }

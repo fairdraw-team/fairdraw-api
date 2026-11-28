@@ -9,4 +9,7 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, TeamMemb
     long countByTeamId(UUID teamId);
     boolean existsByTeamIdAndProfileId(UUID teamId, UUID profileId);
     void deleteByTeamId(UUID teamId);
+    
+    /** 내가 들어가 있는 팀 (최근에 들어간 순) */
+    List<TeamMember> findByProfileIdOrderByJoinedAtDesc(UUID profileId);
 }

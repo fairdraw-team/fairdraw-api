@@ -2,6 +2,7 @@ package com.fairdraw.api.team;
 
 import com.fairdraw.api.team.TeamDtos.*;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,6 +27,12 @@ public class TeamController {
     @ResponseStatus(HttpStatus.CREATED)
     public TeamResponse join(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody JoinTeamRequest req) {
         return teamService.join(jwt, req.code());
+    }
+
+        /** 내가 들어가 있는 팀 목록 (마이페이지용) */
+    @GetMapping("/me")
+    public List<MyTeamResponse> mine(@AuthenticationPrincipal Jwt jwt) {
+        return teamService.mine(jwt);
     }
 
     @GetMapping("/{teamId}")
